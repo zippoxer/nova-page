@@ -7,6 +7,7 @@ use Laravel\Nova\Fields\ID;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Laravel\Nova\Http\Requests\NovaRequest;
+use Illuminate\Support\Facades\Request as RequestFacade;
 
 abstract class StaticResource extends Resource
 {
@@ -81,12 +82,26 @@ abstract class StaticResource extends Resource
      */
     public static function newModel()
     {
-        if(request()->resourceId) {
+        if (request()->resourceId) {
             return resolve(Manager::class)
                 ->newQueryWithoutScopes()
                 ->whereKey(request()->resourceId)
                 ->firstOrFail();
         }
+
+        // Resolve template for AJAX requests (such as Trix)
+        $hasTemplate = preg_match(
+            '#nova/resources/nova-page/route\.([^/]+)#',
+            request()->header('Referer'),
+            $match
+        );
+
+        if (RequestFacade::ajax() && $hasTemplate) {
+            $templateName = $match[1];
+
+            return resolve(Manager::class)->load($templateName);
+        }
+
         return resolve(Manager::class);
     }
 
@@ -214,11 +229,10 @@ abstract class StaticResource extends Resource
     protected function serializeWithId(Collection $fields)
     {
         return [
-            'id' => tap(ID::make('id', function() {
-                        return $this->getKey();
-                    }))->resolve($this->resource),
+            'id' => tap(ID::make('id', function () {
+                return $this->getKey();
+            }))->resolve($this->resource),
             'fields' => $fields->all(),
         ];
     }
-
 }
